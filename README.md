@@ -1,2 +1,2 @@
 # SVM
-Implementation of several Support Vector Machine (SVM) algorithms and visualization of results
+Implementation of various Support Vector Machine (SVM) algorithms including visualization of results
