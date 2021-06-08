@@ -32,7 +32,7 @@ class SVM_predictor():
         return np.array([predictions]).T
     
     # Returns a vector with value of w*x+b for each x in xy
-    def decision_fnction(self, xy):
+    def decision_function(self, xy):
         P=np.array([])
         for i in range(xy.shape[0]):
            P=np.append(P,np.dot(xy[i], self.w)+self.b) 
@@ -268,7 +268,9 @@ def n_fold_cross_validation(C_values, files, n, predClass, arg = None):
             errors.append(classification_error(testpredictions, testlabels))
         errors_c.append(sum(errors)/len(errors))
     return C_values[np.argmin(errors_c)]
-            
+
+
+                
 
 def spam_dataset(predictor, kernel=None):
     C_values=[1,10, 1e2, 1e3, 1e4]
@@ -285,13 +287,60 @@ def spam_dataset(predictor, kernel=None):
         svm = predictor()
     else:
         svm = predictor(kernel)
-    traindata, trainlabels = read_data_txt('/Datasets/Spambase/train.txt')
+    traindata, trainlabels = read_data_txt('Datasets/Spambase/train.txt')
     svm.train(traindata, trainlabels, C)
     testdata, testlabels = read_data_txt('Datasets/Spambase/test.txt')
     predictedlabels = svm.predict_multiple(testdata)
 
     error= classification_error(predictedlabels, testlabels)
     print('Error: ', error)
+    
+def wines_dataset(predictor, kernel=None):
+    C_values=[1,10, 1e2, 1e3, 1e4]
+
+    files=[]
+    validation_files_root='Datasets/Wines/CrossValidation'
+    for i in range(5):
+        files.append([validation_files_root+'/Fold{}/cv-train.txt'.format(i+1), validation_files_root+'/Fold{}/cv-test.txt'.format(i+1)])
+
+    C = n_fold_cross_validation(C_values, files, 5, predictor, kernel)       # Put values of C here   
+    print('Optimal C value: ', C)
+    
+    if kernel is None:
+        svm = predictor()
+    else:
+        svm = predictor(kernel)
+    traindata, trainlabels = read_data_txt('Datasets/Wines/train.txt')
+    svm.train(traindata, trainlabels, C)
+    testdata, testlabels = read_data_txt('Datasets/Wines/test.txt')
+    predictedlabels = svm.predict_multiple(testdata)
+
+    error= classification_error(predictedlabels, testlabels)
+    print('Error: ', error)
+    
+def synthetic_dataset(predictor, kernel=None):
+    C_values=[1,10,1e2,1e3,1e4]
+    files=[]
+    validation_files_root='Datasets/Synthetic/CrossValidation'
+    for i in range(5):
+        files.append([validation_files_root+'/Fold{}/cv-train.txt'.format(i+1), validation_files_root+'/Fold{}/cv-test.txt'.format(i+1)])
+
+    C = n_fold_cross_validation(C_values, files, 5, predictor, kernel)       # Put values of C here   
+    print('Optimal C value: ', C)
+    
+    if kernel is None:
+        svm = predictor()
+    else:
+        svm = predictor(kernel)
+    traindata, trainlabels = read_data_txt('Datasets/Synthetic/train.txt')
+    svm.train(traindata, trainlabels, C)
+    testdata, testlabels = read_data_txt('Datasets/Synthetic/test.txt')
+    predictedlabels = svm.predict_multiple(testdata)
+    
+    plot_solution_2d(traindata, testdata, trainlabels, testlabels, svm)
+    error= classification_error(predictedlabels, testlabels)
+    print('Error: ', error)
+    
 
 def iris_2d_dataset(predictor, kernel=None):
     iris = datasets.load_iris()
@@ -316,9 +365,8 @@ def iris_2d_dataset(predictor, kernel=None):
     error= classification_error(predictedlabels, testlabels)
     print('Error: ', error)
 
-
 def main():
-    iris_2d_dataset(SVM_predictor_sklearn)
+    wines_dataset(SVM_predictor_primal)
 
 if __name__== '__main__':
     main()
