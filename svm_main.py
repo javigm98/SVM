@@ -11,13 +11,14 @@ import kernels
 import svm_predictors
 
 import matplotlib.pyplot as plt
+import time
 
-# Returns the percentage of points missclasified, comparing the values of the
+# Returns the fraction of points missclasified, comparing the values of the
 # labels predicted by the algorithm (predictedlabels) and the real ones (testlabels)
 def zero_one_loss(predictedlabels, testlabels): 
     
     err = float(np.sum(predictedlabels != testlabels))
-    percentage_error = err*100/len(testlabels)
+    percentage_error = err/len(testlabels)
     
     return percentage_error
 
@@ -97,6 +98,7 @@ def read_data_txt(file):
 #       when using predictors with kernels
 def n_fold_cross_validation(C_values, files, n, predClass, arg = None, loss='zero-one', rho=0.7):
     errors_c=[]
+    t0 = time.time()
     for c in C_values:
         errors=[]
         for i in range(n):
@@ -112,6 +114,12 @@ def n_fold_cross_validation(C_values, files, n, predClass, arg = None, loss='zer
             elif loss == 'margin':
                 errors.append(evaluate_and_error_margin(testdata, testlabels, svm, rho))
         errors_c.append(sum(errors)/len(errors))
+    t1 = time.time()
+    print("\n-----------------------------------------")
+    print("Errors for each C value: ", errors_c)
+    print("CV time (s): ", t1-t0)
+    print("-----------------------------------------\n")
+    
     return C_values[np.argmin(errors_c)]
 
 def run_dataset_with_cv(name, predictor, kernel, n=5, loss='zero-one', rho=0.7):
@@ -131,7 +139,9 @@ def run_dataset_with_cv(name, predictor, kernel, n=5, loss='zero-one', rho=0.7):
     else:
         svm = predictor(kernel)
     traindata, trainlabels = read_data_txt('Datasets/{}/train.txt'.format(name))
+    t0=time.time()
     svm.train(traindata, trainlabels, C)
+    t1=time.time()
     testdata, testlabels = read_data_txt('Datasets/{}/test.txt'.format(name))
     
     if loss=='zero-one':
@@ -140,12 +150,13 @@ def run_dataset_with_cv(name, predictor, kernel, n=5, loss='zero-one', rho=0.7):
         error = evaluate_and_error_margin(testdata, testlabels, svm, rho)
         
     print('Error: ', error)
+    print('Train time(s): ', t1-t0)
     print("-----------------------------------------\n")
 
     if(traindata.shape[1]==2 and predictor != svm_predictors.SVM_predictor_kernel):
         pred_save_name, pred_save_title = get_graph_name_predictor(predictor)
         save_name = 'Graphs/{}/{}_C_{}.png'.format(name, pred_save_name, C)
-        title = pred_save_title + ' for ' + name + ' dataset with C=' + int(C)
+        title = pred_save_title + ' for ' + name + ' dataset with C=' + str(C)
         plot_solution_2d(traindata, testdata, trainlabels, testlabels, svm, save_name, title)
     
 def get_graph_name_predictor(predictor):
@@ -170,8 +181,10 @@ def iris_2d_dataset(predictor, kernel=None, loss='zero-one', rho=0.7):
         svm=predictor()
     else:
         svm = predictor(kernel)
-
+    
+    t0=time.time()
     svm.train(traindata, trainlabels, 1)
+    t1=time.time()
 
     
     if loss=='zero-one':
@@ -181,6 +194,7 @@ def iris_2d_dataset(predictor, kernel=None, loss='zero-one', rho=0.7):
         
     print("\n-----------------------------------------")
     print('Error: ', error)
+    print('Train time (s): ', t1-t0)
     print("-----------------------------------------\n")
     
     if predictor != svm_predictors.SVM_predictor_kernel:
@@ -245,7 +259,7 @@ def main():
         print("5. Satimages Dataset (38 features, 3188 train samples, 1431 test samples")
         print("6. Exit")
         
-        dataset_opt=enter_option(1,5, "Enter an option: ")
+        dataset_opt=enter_option(1,6, "Enter an option: ")
         
         if dataset_opt==6:
             break
