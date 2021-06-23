@@ -7,6 +7,7 @@ Created on Tue Jun  8 14:55:02 2021
 import numpy as np
 from sklearn import datasets
 from sklearn.model_selection import train_test_split
+from sklearn.datasets import make_blobs
 import kernels
 import svm_predictors
 
@@ -122,6 +123,44 @@ def n_fold_cross_validation(C_values, files, n, predClass, arg = None, loss='zer
     
     return C_values[np.argmin(errors_c)]
 
+def n_fold_cross_validation_pol_kernel(C_values, d_values, files, n, loss='zero-one', rho=0.7):
+    errors_c=[]
+    t0=time.time()
+    for c in C_values:
+        errors_d=[]
+        for d in d_values:
+            errors=[]
+            kernel = kernels.Polynomial_kernel(c=1, d=d)
+            for i in range(n):
+                svm = svm_predictors.SVM_predictor_kernel(kernel)
+                traindata, trainlabels= read_data_txt(files[i][0])
+                svm.train(traindata, trainlabels, c)
+                testdata, testlabels = read_data_txt(files[i][1])
+                if loss == 'zero-one':
+                    errors.append(evaluate_and_error_zero_one(testdata, testlabels, svm))
+                elif loss == 'margin':
+                    errors.append(evaluate_and_error_margin(testdata, testlabels, svm, rho))
+            errors_d.append(sum(errors)/len(errors))
+        errors_c.append(errors_d)
+    t1 = time.time()
+    print("\n-----------------------------------------")
+    print("Errors for each C and d value: ", errors_c)
+    print("CV time (s): ", t1-t0)
+    print("-----------------------------------------\n")
+    
+    ind_i=0
+    ind_j=0
+    min_err = np.infty
+    
+    for i in range(0, len(errors_c)):
+        for j in range(0, len(errors_c[i])):
+            if errors_c[i][j] < min_err:
+                min_err= errors_c[i][j]
+                ind_i=i
+                ind_j=j
+    return C_values[ind_i], d_values[ind_j]
+
+
 def run_dataset_with_cv(name, predictor, kernel, n=5, loss='zero-one', rho=0.7):
     C_values=[1,10, 1e2, 1e3, 1e4]
 
@@ -158,14 +197,47 @@ def run_dataset_with_cv(name, predictor, kernel, n=5, loss='zero-one', rho=0.7):
         save_name = 'Graphs/{}/{}_C_{}.png'.format(name, pred_save_name, C)
         title = pred_save_title + ' for ' + name + ' dataset with C=' + str(C)
         plot_solution_2d(traindata, testdata, trainlabels, testlabels, svm, save_name, title)
+
+def run_dataset_with_cv_and_pol_kernel(name, n=5, loss='zero-one', rho=0.7):
+    C_values=[1,10, 1e2, 1e3, 1e4]
+    d_values=[1,2,3,4]
+
+    files=[]
+    validation_files_root='Datasets/{}/CrossValidation'.format(name)
+    for i in range(n):
+        files.append([validation_files_root+'/Fold{}/cv-train.txt'.format(i+1), validation_files_root+'/Fold{}/cv-test.txt'.format(i+1)])
+
+    C,d = n_fold_cross_validation_pol_kernel(C_values, d_values, files, n, loss, rho)       # Put values of C here   
+    print("\n-----------------------------------------")
+    print('Optimal C value: ', C)
+    print('Optimal d value: ', d)
     
+    kernel = kernels.Polynomial_kernel(c=1, d=d)
+    svm=svm_predictors.SVM_predictor_kernel(kernel)
+    traindata, trainlabels = read_data_txt('Datasets/{}/train.txt'.format(name))
+    t0=time.time()
+    svm.train(traindata, trainlabels, C)
+    t1=time.time()
+    testdata, testlabels = read_data_txt('Datasets/{}/test.txt'.format(name))
+    
+    if loss=='zero-one':
+        error= evaluate_and_error_zero_one(testdata, testlabels, svm)
+    else:
+        error = evaluate_and_error_margin(testdata, testlabels, svm, rho)
+        
+    print('Error: ', error)
+    print('Train time(s): ', t1-t0)
+    print("-----------------------------------------\n")
+
 def get_graph_name_predictor(predictor):
     if predictor == svm_predictors.SVM_predictor_primal:
         return 'primal_predcitor', 'SVM primal predictor'
     elif predictor==svm_predictors.SVM_predictor_dual:
         return 'dual_predictor', 'SVM dual predictor'
-    else:
+    elif predictor == svm_predictors.SVM_predictor_sklearn:
         return 'sklearn_predictor', 'SVM sklearn predictor'
+    else:
+        return 'primal_predictor_separable', 'Primal predictor separable'
     
 def iris_2d_dataset(predictor, kernel=None, loss='zero-one', rho=0.7):
     iris = datasets.load_iris()
@@ -203,7 +275,44 @@ def iris_2d_dataset(predictor, kernel=None, loss='zero-one', rho=0.7):
         title = pred_save_title + ' for Iris 2d dataset C=1'
         plot_solution_2d(traindata, testdata, trainlabels, testlabels, svm, save_name, title)
         
+def separable_dataset(predictor, kernel=None, loss='zero-one', rho=0.7):
+    initial_centers = [[1, -1], [-1, 1]]
+    X,y = make_blobs(n_samples=1000, centers=initial_centers, 
+                                cluster_std=0.6,random_state=0)
+    y = np.array([y])
+    y = y.T
+    y = 2*y-1
+    traindata, testdata, trainlabels, testlabels= train_test_split(X,y, test_size=0.6, random_state=42)
+    if kernel is None:
+        svm=predictor()
+    else:
+        svm = predictor(kernel)
+    
+    if predictor != svm_predictors.SVM_predictor_primal_separable:
+        t0=time.time()
+        svm.train(traindata, trainlabels, 1)
+        t1=time.time()
+    else:
+        t0=time.time()
+        svm.train(traindata, trainlabels)
+        t1=time.time()
+
+    
+    if loss=='zero-one':
+        error= evaluate_and_error_zero_one(testdata, testlabels, svm)
+    else:
+        error=evaluate_and_error_margin(testdata, testlabels, svm, rho)
         
+    print("\n-----------------------------------------")
+    print('Error: ', error)
+    print('Train time (s): ', t1-t0)
+    print("-----------------------------------------\n")
+    
+    if predictor != svm_predictors.SVM_predictor_kernel:
+        pred_save_name, pred_save_title = get_graph_name_predictor(predictor)
+        save_name = 'Graphs/Separable/{}.png'.format(pred_save_name)
+        title = pred_save_title + ' for separable dataset'
+        plot_solution_2d(traindata, testdata, trainlabels, testlabels, svm, save_name, title)       
     
     
 def enter_option(value_min, value_max, text):
@@ -251,17 +360,20 @@ def enter_positive_or_zero_float(text):
 
 def main():
     while True:
+        cv_kernel_opt=0
+        
         print("Choose the dataset you want to work with:")
         print("1. Spam Messages Dataset (57 features, 250 test samples, 4351 train samples)")
         print("2. Portuguese Wines Dataset (11 features, 649 train samples, 5848 test samples)")
         print("3. Iris Dataset 2D (2 features, 60 train samples, 90 test samples)")
-        print("4. Synthetic Dataset (2 features, 250 train samples, 750 test samples")
-        print("5. Satimages Dataset (38 features, 3188 train samples, 1431 test samples")
-        print("6. Exit")
+        print("4. Synthetic Dataset (2 features, 250 train samples, 750 test samples)")
+        print("5. Satimages Dataset (38 features, 3188 train samples, 1431 test samples)")
+        print("6. Separable Dataset (2 features, 400 train samples, 600 test samples)")
+        print("7. Exit")
         
-        dataset_opt=enter_option(1,6, "Enter an option: ")
+        dataset_opt=enter_option(1,7, "Enter an option: ")
         
-        if dataset_opt==6:
+        if dataset_opt==7:
             break
         
         print("Choose the predictor SVM predictor to use:")
@@ -269,8 +381,12 @@ def main():
         print("2. SVM predictor solving the dual problem")
         print("3. SVM predictor solving the dual problem and using a kernel")
         print("4. SVM predictor implemented in sklearn ")
+        if dataset_opt==6:
+            print("5. SVM predictor solving the primal problem in the separable case")
+            predictor_opt=enter_option(1,5, "Enter an option: ")
         
-        predictor_opt=enter_option(1,4, "Enter an option: ")
+        else:
+            predictor_opt=enter_option(1,4, "Enter an option: ")
         kernel = None
         
         print("Choose the loss function to consider:")
@@ -297,7 +413,16 @@ def main():
             print("2. Gaussian kernel exp((-||x-x'||^2)/(2sigma^2)")
             print("3. Sigmoid kernel tanh(a(x*x')+b")
             kernel_opt = enter_option(1,3, "Enter an option: ")
-            if kernel_opt==1:
+            if kernel_opt==1 and dataset_opt != 3 and dataset_opt != 6:
+                print("How do you want to choose the c and d values?")
+                print("1. Enter the exact c and d values")
+                print("2. Fix c=1 and select d via cross validation")
+                cv_kernel_opt= enter_option(1,2, 'Enter an option: ')
+                if cv_kernel_opt==1:
+                    c = enter_positive_float("Enter c value: ")
+                    d = enter_option(1, np.infty, "Enter d value: ")
+                    kernel = kernels.Polynomial_kernel(c,d)
+            elif kernel_opt==1:
                 c = enter_positive_float("Enter c value: ")
                 d = enter_option(1, np.infty, "Enter d value: ")
                 kernel = kernels.Polynomial_kernel(c,d)
@@ -309,19 +434,35 @@ def main():
                 b = enter_positive_or_zero_float("Enter b value: ")
                 kernel = kernels.Sigmoid_kernel(a, b)
         
-        else:
+        elif predictor_opt ==4:
             predictor = svm_predictors.SVM_predictor_sklearn
+        else:
+            predictor =svm_predictors.SVM_predictor_primal_separable
         
         if dataset_opt == 1:
-            run_dataset_with_cv('Spambase', predictor, kernel, loss=loss, rho=rho)
+            if cv_kernel_opt==2:
+                run_dataset_with_cv_and_pol_kernel('Spambase', loss=loss, rho=rho)
+            else:
+                run_dataset_with_cv('Spambase', predictor, kernel, loss=loss, rho=rho)
         elif dataset_opt==2:
-            run_dataset_with_cv('Wines', predictor, kernel, loss=loss, rho=rho)
+            if cv_kernel_opt==2:
+                run_dataset_with_cv_and_pol_kernel('Wines', loss=loss, rho=rho)
+            else:
+                run_dataset_with_cv('Wines', predictor, kernel, loss=loss, rho=rho)
         elif dataset_opt==3:
             iris_2d_dataset(predictor, kernel, loss=loss, rho=rho)
         elif dataset_opt==4:
-            run_dataset_with_cv('Synthetic', predictor, kernel, loss=loss, rho=rho)
+            if cv_kernel_opt==2:
+                run_dataset_with_cv_and_pol_kernel('Synthetic', loss=loss, rho=rho)
+            else:
+                run_dataset_with_cv('Synthetic', predictor, kernel, loss=loss, rho=rho)
         elif dataset_opt==5:
-            run_dataset_with_cv('Satimage', predictor, kernel, n=10, loss=loss, rho=rho)
+            if cv_kernel_opt==2:
+                run_dataset_with_cv_and_pol_kernel('Satimage', loss=loss, rho=rho)
+            else:
+                run_dataset_with_cv('Satimage', predictor, kernel, n=10, loss=loss, rho=rho)
+        elif dataset_opt==6:
+            separable_dataset(predictor, kernel, loss=loss, rho=rho)
         else:
             break
 

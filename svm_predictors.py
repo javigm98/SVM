@@ -38,6 +38,32 @@ class SVM_predictor():
            P=np.append(P,np.dot(xy[i], self.w)+self.b) 
         return P
 
+# SVM algorithm solving the primal optimization problem for the separable case
+class SVM_predictor_primal_separable(SVM_predictor):
+    def __init__(self):
+        super().__init__()
+        
+    def train(self, traindata, trainlabels):
+        m=np.shape(traindata)[0]
+        n=np.shape(traindata)[1]
+        
+        P=matrix(np.block([[np.eye(n), np.zeros((n,1))], [np.zeros((1,n)), np.zeros(1)]]))
+        q = matrix(np.zeros((n+1,1)))
+        
+        aux = np.eye(m)
+        for i in range(0,m):
+            aux[i][i]=trainlabels[i]
+            
+        G=matrix(np.hstack([np.matmul(aux,traindata)*-1, trainlabels*-1]))
+        h=matrix(-np.ones((m,1)))
+        
+        solvers.options['show_progress'] = False
+        solution=solvers.qp(P,q,G,h)
+
+        self.w=np.array(solution['x'][0:n])
+        self.b=solution['x'][n]
+        
+        
 # SVM algorithm solving the primal optimization problem
 class SVM_predictor_primal(SVM_predictor):
     def __init__(self):
